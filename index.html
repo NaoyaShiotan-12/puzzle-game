@@ -155,7 +155,7 @@ let gameOverCounter = 0;
 // ★ 各フルーツの画像URLと設定（サンプルのフリーイラストURLを仮置きしています）
 // ご自身で画像を用意する場合は、url: "images/cherry.png" のようにパスを書き換えてください。
 const fruitDetails = [
-    { radius: 18, color: "#ff4d4d", score: 1,  url: "https://imgur.com" }, // 1: さくらんぼ
+    { radius: 18, color: "#ff4d4d", score: 1,  url: "1.png" }, // 1: さくらんぼ
     { radius: 24, color: "#ff7675", score: 2,  url: "https://imgur.com" }, // 2: いちご
     { radius: 32, color: "#a29bfe", score: 4,  url: "https://imgur.com" }, // 3: ぶどう
     { radius: 40, color: "#ffeaa7", score: 6,  url: "https://imgur.com" }, // 4: デコポン
@@ -257,44 +257,60 @@ function createMergeEffect(x, y, color, score) {
 
 class Fruit {
     constructor(x, y, level) {
-        this.x = x; this.y = y; this.vx = 0; this.vy = 0; this.level = level;
+        this.x = x;
+        this.y = y;
+        this.vx = 0;
+        this.vy = 0;
+        this.level = level;
+        
+        // ★ 1. 回転する角度を追加（最初は0度）
+        this.angle = 0; 
+        
         const details = fruitDetails[level - 1];
         this.radius = details.radius;
         this.color = details.color;
-        this.imgInfo = details; // 画像への参照
+        this.imgInfo = details; 
     }
+
     update() {
-        this.vy += gravity; this.x += this.vx; this.y += this.vy;
+        this.vy += gravity;
+        this.x += this.vx;
+        this.y += this.vy;
+
+        // ★ 2. 横に動いた速度（vx）に合わせて、自然に回転角を計算
+        this.angle += this.vx / this.radius;
+
         if (this.x - this.radius < 0) { this.x = this.radius; this.vx *= -bounce; }
         if (this.x + this.radius > WIDTH) { this.x = WIDTH - this.radius; this.vx *= -bounce; }
         if (this.y + this.radius > HEIGHT) { this.y = HEIGHT - this.radius; this.vy *= -bounce; this.vx *= friction; }
     }
     
-    // ★ 描画関数を画像対応にアップデート
     draw() {
         if (this.imgInfo.image.loaded) {
             ctx.save();
-            // 丸い形にクリッピング（切り抜き）して画像を描画する
+            
+            // ★ 3. フルーツの中心に座標の基準を移動させ、角度分だけ回転させる
+            ctx.translate(this.x, this.y);
+            ctx.rotate(this.angle);
+            
+            // ★ 4. 回転した状態の中心（0, 0）を基準に丸く切り抜く
             ctx.beginPath();
-            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
             ctx.clip();
             
-            // 画像を円のサイズに合わせてぴったり描画
+            // ★ 5. 画像を少し拡大（2.4倍）して、中心を合わせて描画する
             ctx.drawImage(
                 this.imgInfo.image, 
-                this.x - this.radius, 
-                this.y - this.radius, 
-                this.radius * 2, 
-                this.radius * 2
+                -this.radius * 1.2, 
+                -this.radius * 1.2, 
+                this.radius * 2.4, 
+                this.radius * 2.4
             );
+
             ctx.restore();
             
-            // 綺麗な輪郭線（フチ）をつける
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-            ctx.strokeStyle = "#333333";
-            ctx.lineWidth = 2;
-            ctx.stroke();
+            // 枠線は削除した状態をキープしています
+
         } else {
             // 万が一画像が読み込めない場合のバックアップ描画（単色円）
             ctx.beginPath();
@@ -313,6 +329,7 @@ class Fruit {
         }
     }
 }
+
 
 function loadHiScore() { const score = localStorage.getItem("suika_hi_score"); savedHiScore = score ? parseInt(score, 10) : 0; }
 function randomLevel() { return Math.floor(Math.random() * 5) + 1; }
