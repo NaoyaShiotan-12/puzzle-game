@@ -3,457 +3,483 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
-<title>Fruit Merge Game</title>
+<title>Suika Merge Game Pro - Image Edition</title>
 
 <style>
-    body{
-        margin:0;
-        background:#222;
-        overflow:hidden;
-        font-family:sans-serif;
-        touch-action:none;
+    body {
+        margin: 0;
+        background: #2c3e50;
+        overflow: hidden;
+        font-family: 'Helvetica Neue', Arial, sans-serif;
+        touch-action: none;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
     }
 
-    canvas{
-        display:block;
-        margin:auto;
-        background:white;
+    #gameContainer {
+        position: relative;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
     }
 
-    #ui{
-        position:absolute;
-        top:10px;
-        left:10px;
-        color:white;
-        z-index:10;
-        font-weight:bold;
+    canvas {
+        display: block;
+        background: #fcf3cf; 
+        border-radius: 4px;
     }
 
-    #gameover{
-        position:absolute;
-        inset:0;
-        background:rgba(0,0,0,0.7);
-        display:none;
-        justify-content:center;
-        align-items:center;
-        flex-direction:column;
-        color:white;
-        font-size:32px;
-        z-index:20;
+    #ui {
+        position: absolute;
+        top: 15px;
+        left: 15px;
+        color: #34495e;
+        z-index: 10;
+        font-weight: bold;
+        font-size: 15px;
+        pointer-events: none;
+        background: rgba(255,255,255,0.85);
+        padding: 10px 14px;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    #ui div {
+        margin-bottom: 3px;
+    }
+    #ui #hiScore {
+        color: #e67e22;
+        font-size: 13px;
     }
 
-    button{
-        padding:12px 20px;
-        font-size:18px;
-        margin-top:20px;
+    #gameover {
+        position: absolute;
+        inset: 0;
+        background: rgba(0,0,0,0.85);
+        display: none;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+        color: white;
+        font-size: 32px;
+        z-index: 20;
+        border-radius: 4px;
+        opacity: 0;
+        transition: opacity 0.6s ease;
+    }
+
+    #newRecordTag {
+        color: #f1c40f;
+        font-size: 20px;
+        font-weight: bold;
+        margin-top: 10px;
+        text-shadow: 0 0 10px rgba(241,196,15,0.8);
+        animation: blink 0.8s infinite alternate;
+        display: none;
+    }
+
+    @keyframes blink {
+        0% { opacity: 0.4; transform: scale(0.95); }
+        100% { opacity: 1; transform: scale(1.05); }
+    }
+
+    button {
+        padding: 12px 28px;
+        font-size: 18px;
+        margin-top: 25px;
+        cursor: pointer;
+        background: #e67e22;
+        color: white;
+        border: none;
+        border-radius: 25px;
+        font-weight: bold;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        transition: 0.2s;
+    }
+    button:hover {
+        background: #d35400;
+        transform: translateY(-2px);
     }
 </style>
 </head>
 <body>
 
-<div id="ui">
-    <div id="stage">STAGE: 1</div>
-    <div id="score">SCORE: 0</div>
-    <div id="item">ITEM: 0 / 20</div>
-</div>
+<div id="gameContainer">
+    <div id="ui">
+        <div id="score">SCORE: 0</div>
+        <div id="hiScore">HI-SCORE: 0</div>
+    </div>
 
-<div id="gameover">
-    <div>GAME OVER</div>
-    <div id="finalScore"></div>
-    <button onclick="resetGame()">RETRY</button>
-</div>
+    <div id="gameover">
+        <div style="font-weight: bold; color: #e74c3c; letter-spacing: 2px;">GAME OVER</div>
+        <div id="newRecordTag">✨ NEW RECORD ✨</div>
+        <div id="finalScore" style="margin-top: 15px; font-size: 26px;"></div>
+        <button onclick="resetGame()">RETRY</button>
+    </div>
 
-<canvas id="game"></canvas>
+    <canvas id="game"></canvas>
+</div>
 
 <script>
-
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-canvas.width = 400;
-canvas.height = 700;
+canvas.width = 450;
+canvas.height = 750;
 
 const WIDTH = canvas.width;
 const HEIGHT = canvas.height;
+const DEAD_LINE_Y = 150; 
 
-const DEAD_LINE_Y = 100;
-
-let gravity = 0.4;
-const bounce = 0.4;
-const friction = 0.98;
+// 物理パラメータ
+const gravity = 0.4;
+const bounce = 0.2;     
+const friction = 0.98;   
 
 let fruits = [];
-
-let stageLevel = 1;
-let currentLevelScore = 0;
+let particles = []; 
+let scorePopups = []; 
 let totalScore = 0;
+let savedHiScore = 0; 
 
 let currentFruitLevel = 1;
 let nextFruitLevel = 1;
 
 let mouseX = WIDTH / 2;
+let isPressing = false;   
+let canSpawn = true;      
 
 let gameOver = false;
 let gameOverCounter = 0;
 
-let targetLevel = 1;
-let itemChargeCount = 0;
-
-const SCORE_TO_LEVEL_UP = 20;
-
-const colors = [
-    "#ff0000",
-    "#ff9900",
-    "#ffff00",
-    "#00cc00",
-    "#00ffff",
-    "#0000ff",
-    "#800080"
+// ★ 各フルーツの画像URLと設定（サンプルのフリーイラストURLを仮置きしています）
+// ご自身で画像を用意する場合は、url: "images/cherry.png" のようにパスを書き換えてください。
+const fruitDetails = [
+    { radius: 18, color: "#ff4d4d", score: 1,  url: "https://imgur.com" }, // 1: さくらんぼ
+    { radius: 24, color: "#ff7675", score: 2,  url: "https://imgur.com" }, // 2: いちご
+    { radius: 32, color: "#a29bfe", score: 4,  url: "https://imgur.com" }, // 3: ぶどう
+    { radius: 40, color: "#ffeaa7", score: 6,  url: "https://imgur.com" }, // 4: デコポン
+    { radius: 50, color: "#fab1a0", score: 10, url: "https://imgur.com" }, // 5: かき
+    { radius: 60, color: "#ff7675", score: 15, url: "https://imgur.com" }, // 6: りんご
+    { radius: 72, color: "#fdcb6e", score: 21, url: "https://imgur.com" }, // 7: なし
+    { radius: 84, color: "#fd79a8", score: 28, url: "https://imgur.com" }, // 8: 桃
+    { radius: 96, color: "#f1c40f", score: 36, url: "https://imgur.com" }, // 9: パイナップル
+    { radius: 110, color: "#2ecc71", score: 45, url: "https://imgur.com" }, // 10: メロン
+    { radius: 128, color: "#27ae60", score: 55, url: "https://imgur.com" }  // 11: スイカ
 ];
 
-class Fruit{
-    constructor(x,y,level){
-        this.x = x;
-        this.y = y;
-
-        this.vx = 0;
-        this.vy = 0;
-
-        this.level = level;
-
-        this.radius = 15 + (level - 1) * 10;
-
-        this.color = colors[level - 1] || "#ff00ff";
-    }
-
-    update(){
-
-        this.vy += gravity;
-
-        this.x += this.vx;
-        this.y += this.vy;
-
-        if(this.x - this.radius < 0){
-            this.x = this.radius;
-            this.vx *= -bounce;
-        }
-
-        if(this.x + this.radius > WIDTH){
-            this.x = WIDTH - this.radius;
-            this.vx *= -bounce;
-        }
-
-        if(this.y + this.radius > HEIGHT){
-            this.y = HEIGHT - this.radius;
-            this.vy *= -bounce;
-            this.vx *= friction;
-        }
-    }
-
-    draw(){
-
-        ctx.beginPath();
-
-        ctx.fillStyle = this.color;
-
-        ctx.arc(this.x,this.y,this.radius,0,Math.PI*2);
-
-        ctx.fill();
-
-        ctx.strokeStyle = "black";
-        ctx.stroke();
-    }
-}
-
-function randomLevel(){
-
-    let max = 3;
-
-    if(stageLevel === 2) max = 4;
-    if(stageLevel >= 3) max = 5;
-
-    return Math.floor(Math.random() * max) + 1;
-}
-
-function drawNextFruit(){
-
-    nextFruitLevel = randomLevel();
-
-    if(currentFruitLevel === 0){
-        currentFruitLevel = randomLevel();
-    }
-}
-
-drawNextFruit();
-
-canvas.addEventListener("mousemove",(e)=>{
-
-    const rect = canvas.getBoundingClientRect();
-
-    mouseX = e.clientX - rect.left;
+// ★ 画像オブジェクトを自動生成して事前読み込み
+fruitDetails.forEach(details => {
+    details.image = new Image();
+    details.image.src = details.url;
+    details.image.loaded = false;
+    details.image.onload = () => { details.image.loaded = true; };
 });
 
-canvas.addEventListener("touchmove",(e)=>{
-
-    e.preventDefault();
-
-    const rect = canvas.getBoundingClientRect();
-
-    mouseX = e.touches[0].clientX - rect.left;
-
-},{passive:false});
-
-canvas.addEventListener("click",spawnFruit);
-
-canvas.addEventListener("touchstart",(e)=>{
-
-    e.preventDefault();
-
-    spawnFruit();
-
-},{passive:false});
-
-function spawnFruit(){
-
-    if(gameOver) return;
-
-    fruits.push(new Fruit(mouseX,50,currentFruitLevel));
-
-    currentFruitLevel = nextFruitLevel;
-
-    drawNextFruit();
-}
-
-function update(){
-
-    for(let f of fruits){
-        f.update();
+// Web Audio API を使った効果音管理クラス
+class SoundEffects {
+    constructor() { this.ctx = null; }
+    init() {
+        if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
     }
+    playDrop() {
+        this.init(); if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain();
+        osc.type = 'triangle'; osc.frequency.setValueAtTime(180, now);
+        osc.frequency.exponentialRampToValueAtTime(100, now + 0.1); 
+        gain.gain.setValueAtTime(0.3, now); gain.gain.linearRampToValueAtTime(0.01, now + 0.1); 
+        osc.connect(gain); gain.connect(this.ctx.destination);
+        osc.start(now); osc.stop(now + 0.1);
+    }
+    playMerge() {
+        this.init(); if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain();
+        osc.type = 'sine'; osc.frequency.setValueAtTime(300, now);
+        osc.frequency.setValueAtTime(600, now + 0.05); osc.frequency.exponentialRampToValueAtTime(800, now + 0.15);
+        gain.gain.setValueAtTime(0.2, now); gain.gain.linearRampToValueAtTime(0.01, now + 0.2); 
+        osc.connect(gain); gain.connect(this.ctx.destination);
+        osc.start(now); osc.stop(now + 0.2);
+    }
+    playGameOver() {
+        this.init(); if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        for (let i = 0; i < 3; i++) {
+            const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain();
+            osc.type = 'sawtooth'; const timeOffset = now + (i * 0.15);
+            osc.frequency.setValueAtTime(300 - (i * 50), timeOffset); osc.frequency.linearRampToValueAtTime(80, timeOffset + 0.3);
+            gain.gain.setValueAtTime(0.15, timeOffset); gain.gain.linearRampToValueAtTime(0.01, timeOffset + 0.3);
+            osc.connect(gain); gain.connect(this.ctx.destination);
+            osc.start(timeOffset); osc.stop(timeOffset + 0.3);
+        }
+    }
+}
+const sounds = new SoundEffects();
 
-    checkCollisions();
-
-    checkGameOver();
+// エフェクト用パーティクルクラス
+class Particle {
+    constructor(x, y, color) {
+        this.x = x; this.y = y; this.color = color;
+        this.radius = Math.random() * 4 + 3; 
+        const angle = Math.random() * Math.PI * 2; const speed = Math.random() * 5 + 3; 
+        this.vx = Math.cos(angle) * speed; this.vy = Math.sin(angle) * speed - 2; 
+        this.alpha = 1.0; this.decay = Math.random() * 0.02 + 0.015; 
+    }
+    update() { this.vy += gravity * 0.3; this.x += this.vx; this.y += this.vy; this.alpha -= this.decay; }
+    draw() {
+        ctx.save(); ctx.globalAlpha = this.alpha; ctx.beginPath(); ctx.fillStyle = this.color;
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    }
 }
 
-function checkCollisions(){
+// スコアポップアップテキストクラス
+class ScorePopup {
+    constructor(x, y, score) {
+        this.x = x; this.y = y; this.text = "+" + score; this.vy = -1.2; this.alpha = 1.0; this.decay = 0.02; 
+    }
+    update() { this.y += this.vy; this.alpha -= this.decay; }
+    draw() {
+        ctx.save(); ctx.globalAlpha = this.alpha;
+        ctx.font = "bold 22px 'Helvetica Neue', Arial, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.strokeStyle = "#000000"; ctx.lineWidth = 4; ctx.strokeText(this.text, this.x, this.y);
+        ctx.fillStyle = "#ffffff"; ctx.fillText(this.text, this.x, this.y); ctx.restore();
+    }
+}
 
-    for(let i=0;i<fruits.length;i++){
+function createMergeEffect(x, y, color, score) {
+    const particleCount = 15;
+    for (let i = 0; i < particleCount; i++) { particles.push(new Particle(x, y, color)); }
+    scorePopups.push(new ScorePopup(x, y, score));
+    sounds.playMerge();
+}
 
-        for(let j=i+1;j<fruits.length;j++){
+class Fruit {
+    constructor(x, y, level) {
+        this.x = x; this.y = y; this.vx = 0; this.vy = 0; this.level = level;
+        const details = fruitDetails[level - 1];
+        this.radius = details.radius;
+        this.color = details.color;
+        this.imgInfo = details; // 画像への参照
+    }
+    update() {
+        this.vy += gravity; this.x += this.vx; this.y += this.vy;
+        if (this.x - this.radius < 0) { this.x = this.radius; this.vx *= -bounce; }
+        if (this.x + this.radius > WIDTH) { this.x = WIDTH - this.radius; this.vx *= -bounce; }
+        if (this.y + this.radius > HEIGHT) { this.y = HEIGHT - this.radius; this.vy *= -bounce; this.vx *= friction; }
+    }
+    
+    // ★ 描画関数を画像対応にアップデート
+    draw() {
+        if (this.imgInfo.image.loaded) {
+            ctx.save();
+            // 丸い形にクリッピング（切り抜き）して画像を描画する
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.clip();
+            
+            // 画像を円のサイズに合わせてぴったり描画
+            ctx.drawImage(
+                this.imgInfo.image, 
+                this.x - this.radius, 
+                this.y - this.radius, 
+                this.radius * 2, 
+                this.radius * 2
+            );
+            ctx.restore();
+            
+            // 綺麗な輪郭線（フチ）をつける
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.strokeStyle = "#333333";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        } else {
+            // 万が一画像が読み込めない場合のバックアップ描画（単色円）
+            ctx.beginPath();
+            ctx.fillStyle = this.color;
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = "#333333";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            
+            ctx.fillStyle = "rgba(0,0,0,0.2)";
+            ctx.font = `bold ${this.radius * 0.6}px sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(this.level, this.x, this.y);
+        }
+    }
+}
 
-            const f1 = fruits[i];
-            const f2 = fruits[j];
+function loadHiScore() { const score = localStorage.getItem("suika_hi_score"); savedHiScore = score ? parseInt(score, 10) : 0; }
+function randomLevel() { return Math.floor(Math.random() * 5) + 1; }
+function initNextFruit() { currentFruitLevel = nextFruitLevel; nextFruitLevel = randomLevel(); }
 
-            const dx = f2.x - f1.x;
-            const dy = f2.y - f1.y;
+loadHiScore();
+nextFruitLevel = randomLevel();
+initNextFruit();
 
-            const dist = Math.sqrt(dx*dx + dy*dy);
+function updateMouseX(clientX) {
+    const rect = canvas.getBoundingClientRect(); let x = clientX - rect.left;
+    const currentRadius = fruitDetails[currentFruitLevel - 1].radius;
+    if (x < currentRadius) x = currentRadius; if (x > WIDTH - currentRadius) x = WIDTH - currentRadius;
+    mouseX = x;
+}
 
-            const minDist = f1.radius + f2.radius;
+canvas.addEventListener("mousemove", (e) => { updateMouseX(e.clientX); });
+canvas.addEventListener("mousedown", (e) => { sounds.init(); isPressing = true; updateMouseX(e.clientX); });
+window.addEventListener("mouseup", () => { if (isPressing) { triggerSpawn(); } isPressing = false; });
 
-            if(dist < minDist){
+canvas.addEventListener("touchmove", (e) => { e.preventDefault(); updateMouseX(e.touches.clientX); }, { passive: false });
+canvas.addEventListener("touchstart", (e) => { e.preventDefault(); sounds.init(); isPressing = true; updateMouseX(e.touches.clientX); }, { passive: false });
+window.addEventListener("touchend", () => { if (isPressing) { triggerSpawn(); } isPressing = false; });
 
-                if(f1.level === f2.level){
+function triggerSpawn() {
+    if (gameOver || !canSpawn) return;
+    const newFruit = new Fruit(mouseX, DEAD_LINE_Y - 50, currentFruitLevel);
+    fruits.push(newFruit);
+    sounds.playDrop();
+    canSpawn = false; initNextFruit();
+    setTimeout(() => { canSpawn = true; }, 500);
+}
 
-                    const newLevel = f1.level + 1;
+function update() {
+    for (let f of fruits) { f.update(); }
+    for (let i = particles.length - 1; i >= 0; i--) { particles[i].update(); if (particles[i].alpha <= 0) particles.splice(i, 1); }
+    for (let i = scorePopups.length - 1; i >= 0; i--) { scorePopups[i].update(); if (scorePopups[i].alpha <= 0) scorePopups.splice(i, 1); }
+    checkCollisions(); checkGameOver();
+}
 
-                    if(newLevel >= 7){
+function checkCollisions() {
+    for (let i = 0; i < fruits.length; i++) {
+        for (let j = i + 1; j < fruits.length; j++) {
+            const f1 = fruits[i]; const f2 = fruits[j];
+            const dx = f2.x - f1.x; const dy = f2.y - f1.y;
+            const dist = Math.sqrt(dx * dx + dy * dy); const minDist = f1.radius + f2.radius;
 
-                        fruits = [];
+            if (dist < minDist) {
+                if (f1.level === f2.level) {
+                    const currentLevel = f1.level;
+                    const nx = (f1.x + f2.x) / 2; const ny = (f1.y + f2.y) / 2;
+                    const fruitColor = f1.color; const addedScore = currentLevel === 11 ? 100 : fruitDetails[currentLevel].score;
 
-                        totalScore += 100;
+                    createMergeEffect(nx, ny, fruitColor, addedScore);
+                    
+                    if (currentLevel === 11) { fruits.splice(j, 1); fruits.splice(i, 1); totalScore += addedScore; return; }
 
-                        return;
+                    const nextLevel = currentLevel + 1;
+                    fruits.splice(j, 1); fruits.splice(i, 1);
+                    const upgradedFruit = new Fruit(nx, ny, nextLevel); upgradedFruit.vy = -2; fruits.push(upgradedFruit);
+                    totalScore += addedScore; return;
+                } else {
+                    const overlap = minDist - dist; const nx = dx / dist; const ny = dy / dist;
+                    f1.x -= nx * overlap * 0.5; f1.y -= ny * overlap * 0.5; f2.x += nx * overlap * 0.5; f2.y += ny * overlap * 0.5;
+                    const rvx = f2.vx - f1.vx; const rvy = f2.vy - f1.vy; const velAlongNormal = rvx * nx + rvy * ny;
+                    if (velAlongNormal < 0) {
+                        const restitution = bounce; let impulseScalar = -(1 + restitution) * velAlongNormal; impulseScalar /= 2; 
+                        const impulseX = impulseScalar * nx; const impulseY = impulseScalar * ny;
+                        f1.vx -= impulseX; f1.vy -= impulseY; f2.vx += impulseX; f2.vy += impulseY;
                     }
-
-                    const nx = (f1.x + f2.x) / 2;
-                    const ny = (f1.y + f2.y) / 2;
-
-                    fruits.splice(j,1);
-                    fruits.splice(i,1);
-
-                    fruits.push(new Fruit(nx,ny,newLevel));
-
-                    totalScore += newLevel;
-                    currentLevelScore += newLevel;
-
-                    if(newLevel === targetLevel && itemChargeCount < 20){
-                        itemChargeCount++;
-                    }
-
-                    if(currentLevelScore >= SCORE_TO_LEVEL_UP){
-
-                        stageLevel++;
-
-                        currentLevelScore = 0;
-
-                        gravity += 0.2;
-                    }
-
-                    return;
-
-                }else{
-
-                    const overlap = minDist - dist;
-
-                    const nx = dx / dist;
-                    const ny = dy / dist;
-
-                    f1.x -= nx * overlap * 0.5;
-                    f1.y -= ny * overlap * 0.5;
-
-                    f2.x += nx * overlap * 0.5;
-                    f2.y += ny * overlap * 0.5;
                 }
             }
         }
     }
 }
 
-function checkGameOver(){
-
+function checkGameOver() {
     let overflow = false;
-
-    for(let f of fruits){
-
-        if(f.y - f.radius < DEAD_LINE_Y){
-
-            overflow = true;
-            break;
-        }
-    }
-
-    if(overflow){
-
+    for (let f of fruits) { if (f.y - f.radius < DEAD_LINE_Y && Math.abs(f.vy) < 1) { overflow = true; break; } }
+    if (overflow) {
         gameOverCounter++;
+        if (gameOverCounter > 150) { gameOver = true; triggerGameOverUI(); }
+    } else { gameOverCounter = 0; }
+}
 
-        if(gameOverCounter > 120){
+function triggerGameOverUI() {
+    sounds.playGameOver();
+    const goEl = document.getElementById("gameover"); const recordTag = document.getElementById("newRecordTag");
+    if (totalScore > savedHiScore) { savedHiScore = totalScore; localStorage.setItem("suika_hi_score", savedHiScore); recordTag.style.display = "block"; } else { recordTag.style.display = "none"; }
+    document.getElementById("finalScore").innerText = "SCORE : " + totalScore;
+    goEl.style.display = "flex"; setTimeout(() => { goEl.style.opacity = "1"; }, 50);
+}
 
-            gameOver = true;
+function draw() {
+    ctx.clearRect(0, 0, WIDTH, HEIGHT);
 
-            document.getElementById("gameover").style.display = "flex";
+    if (gameOverCounter > 0) {
+        const pulse = Math.abs(Math.sin(gameOverCounter * 0.15));
+        ctx.strokeStyle = `rgba(231, 76, 60, ${pulse})`; ctx.lineWidth = 4;
+    } else { ctx.strokeStyle = "#7f8c8d"; ctx.lineWidth = 1; }
+    ctx.beginPath(); ctx.moveTo(0, DEAD_LINE_Y); ctx.lineTo(WIDTH, DEAD_LINE_Y); ctx.stroke();
 
-            document.getElementById("finalScore").innerText =
-                "SCORE : " + totalScore;
+    for (let f of fruits) { f.draw(); }
+    for (let p of particles) p.draw();
+    for (let popup of scorePopups) popup.draw();
+
+    if (!gameOver && canSpawn) {
+        ctx.strokeStyle = "rgba(52, 152, 219, 0.3)"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(mouseX, DEAD_LINE_Y - 50); ctx.lineTo(mouseX, HEIGHT); ctx.stroke();
+
+        const preview = new Fruit(mouseX, DEAD_LINE_Y - 50, currentFruitLevel);
+        ctx.globalAlpha = 0.8; preview.draw(); ctx.globalAlpha = 1.0;
+    }
+
+    drawNextPreview(); drawEvolutionCircle(); updateUI();
+}
+
+function drawNextPreview() {
+    const boxX = WIDTH - 90; const boxY = 15;
+    ctx.fillStyle = "rgba(255,255,255,0.8)"; ctx.fillRect(boxX, boxY, 75, 75);
+    ctx.strokeStyle = "#34495e"; ctx.lineWidth = 2; ctx.strokeRect(boxX, boxY, 75, 75);
+    ctx.fillStyle = "#34495e"; ctx.font = "bold 11px sans-serif"; ctx.textAlign = "center"; ctx.fillText("NEXT", boxX + 37.5, boxY + 18);
+
+    const nextFruit = new Fruit(boxX + 37.5, boxY + 48, nextFruitLevel);
+    if(nextFruit.radius > 20) nextFruit.radius = 20; 
+    nextFruit.draw();
+}
+
+// ★ 進化サークル側も画像で綺麗に表示されるようアップデート
+function drawEvolutionCircle() {
+    const centerX = WIDTH - 60; const centerY = 180; const circleRadius = 38;    
+    ctx.fillStyle = "rgba(255, 255, 255, 0.7)"; ctx.beginPath(); ctx.arc(centerX, centerY, circleRadius + 18, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "rgba(52, 73, 94, 0.3)"; ctx.lineWidth = 1; ctx.stroke();
+
+    const totalNodes = fruitDetails.length;
+    for (let i = 0; i < totalNodes; i++) {
+        const angle = (i / totalNodes) * Math.PI * 2 - Math.PI / 2;
+        const nodeX = centerX + Math.cos(angle) * circleRadius; const nodeY = centerY + Math.sin(angle) * circleRadius;
+        const nodeRadius = 9; 
+
+        if (fruitDetails[i].image.loaded) {
+            ctx.save();
+            ctx.beginPath(); ctx.arc(nodeX, nodeY, nodeRadius, 0, Math.PI * 2); ctx.clip();
+            ctx.drawImage(fruitDetails[i].image, nodeX - nodeRadius, nodeY - nodeRadius, nodeRadius * 2, nodeRadius * 2);
+            ctx.restore();
+            ctx.beginPath(); ctx.arc(nodeX, nodeY, nodeRadius, 0, Math.PI * 2); ctx.strokeStyle = "#333333"; ctx.lineWidth = 1; ctx.stroke();
+        } else {
+            ctx.beginPath(); ctx.fillStyle = fruitDetails[i].color; ctx.arc(nodeX, nodeY, nodeRadius, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = "rgba(0, 0, 0, 0.6)"; ctx.font = "bold 8px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(i + 1, nodeX, nodeY);
         }
-
-    }else{
-
-        gameOverCounter = 0;
     }
+    ctx.fillStyle = "#34495e"; ctx.font = "9px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("EVO ↻", centerX, centerY);
 }
 
-function draw(){
-
-    ctx.clearRect(0,0,WIDTH,HEIGHT);
-
-    ctx.strokeStyle = "red";
-
-    ctx.setLineDash([10,10]);
-
-    ctx.beginPath();
-
-    ctx.moveTo(0,DEAD_LINE_Y);
-
-    ctx.lineTo(WIDTH,DEAD_LINE_Y);
-
-    ctx.stroke();
-
-    ctx.setLineDash([]);
-
-    for(let f of fruits){
-        f.draw();
-    }
-
-    if(!gameOver){
-
-        const preview = new Fruit(mouseX,50,currentFruitLevel);
-
-        ctx.globalAlpha = 0.5;
-
-        preview.draw();
-
-        ctx.globalAlpha = 1;
-    }
-
-    drawNextPreview();
-
-    updateUI();
+function updateUI() {
+    document.getElementById("score").innerText = "SCORE: " + totalScore;
+    document.getElementById("hiScore").innerText = "HI-SCORE: " + savedHiScore;
 }
 
-function drawNextPreview(){
-
-    ctx.strokeStyle = "black";
-
-    ctx.strokeRect(WIDTH - 80,10,65,65);
-
-    ctx.fillStyle = "black";
-
-    ctx.font = "12px sans-serif";
-
-    ctx.fillText("NEXT",WIDTH - 62,25);
-
-    const next = new Fruit(WIDTH - 48,50,nextFruitLevel);
-
-    next.draw();
+function resetGame() {
+    fruits = []; particles = []; scorePopups = []; totalScore = 0; gameOverCounter = 0; gameOver = false; canSpawn = true;
+    initNextFruit();
+    const goEl = document.getElementById("gameover"); goEl.style.opacity = "0"; setTimeout(() => { goEl.style.display = "none"; }, 600);
 }
 
-function updateUI(){
-
-    document.getElementById("stage").innerText =
-        "STAGE: " + stageLevel;
-
-    document.getElementById("score").innerText =
-        "SCORE: " + totalScore;
-
-    document.getElementById("item").innerText =
-        "ITEM: " + itemChargeCount + " / 20";
-}
-
-function resetGame(){
-
-    fruits = [];
-
-    gravity = 0.4;
-
-    stageLevel = 1;
-
-    currentLevelScore = 0;
-
-    totalScore = 0;
-
-    itemChargeCount = 0;
-
-    gameOverCounter = 0;
-
-    gameOver = false;
-
-    currentFruitLevel = 1;
-
-    drawNextFruit();
-
-    document.getElementById("gameover").style.display = "none";
-}
-
-function loop(){
-
-    if(!gameOver){
-        update();
-    }
-
-    draw();
-
-    requestAnimationFrame(loop);
-}
-
+function loop() { if (!gameOver) { update(); } draw(); requestAnimationFrame(loop); }
 loop();
-
-setInterval(()=>{
-
-    targetLevel = Math.floor(Math.random() * 6) + 1;
-
-},10000);
-
 </script>
 
 </body>
